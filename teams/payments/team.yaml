@@ -1,0 +1,7 @@
+team: payments
+
+buckets:
+  - name: invoices
+    visibility: private
+  - name: reports
+    visibility: private

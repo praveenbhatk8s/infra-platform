@@ -29,4 +29,29 @@ variable "buckets" {
     condition     = length(distinct([for b in var.buckets : b.name])) == length(var.buckets)
     error_message = "Bucket names must be unique within a team."
   }
+
+  validation {
+    condition     = alltrue([for b in var.buckets : can(regex("^[a-z0-9][a-z0-9-]{1,18}[a-z0-9]$", b.name))])
+    error_message = "Bucket names must be 3-20 chars: lowercase letters, digits and hyphens, not starting or ending with a hyphen."
+  }
+}
+
+variable "org_prefix" {
+  description = "Organisation prefix for every resource name. Set by the platform, not by teams."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[a-z][a-z0-9]{1,9}$", var.org_prefix))
+    error_message = "org_prefix must be 2-10 chars: lowercase letters and digits, starting with a letter."
+  }
+}
+
+variable "environment" {
+  description = "Deployment environment."
+  type        = string
+
+  validation {
+    condition     = contains(["dev", "staging", "prod"], var.environment)
+    error_message = "environment must be one of: dev, staging, prod."
+  }
 }

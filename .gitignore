@@ -13,3 +13,6 @@ crash.log
 
 # Lock files only belong in root modules, not reusable ones
 modules/**/.terraform.lock.hcl
+
+# Per-team Terraform data folders created by scripts/tf-team.sh
+.terraform-*/

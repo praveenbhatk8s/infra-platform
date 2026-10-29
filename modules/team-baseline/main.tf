@@ -97,3 +97,39 @@ resource "aws_s3_bucket_policy" "this" {
   # The public access block must be relaxed before AWS accepts a public policy.
   depends_on = [aws_s3_bucket_public_access_block.this]
 }
+
+resource "aws_iam_role" "this" {
+  name = local.name_prefix
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { AWS = var.trusted_principal_arns }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "s3_access" {
+  name = "s3-team-buckets"
+  role = aws_iam_role.this.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "ListOwnBuckets"
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket"]
+        Resource = [for b in local.buckets : b.arn]
+      },
+      {
+        Sid      = "ReadWriteOwnObjects"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+        Resource = [for b in local.buckets : "${b.arn}/*"]
+      },
+    ]
+  })
+}

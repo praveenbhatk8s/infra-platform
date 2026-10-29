@@ -55,3 +55,13 @@ variable "environment" {
     error_message = "environment must be one of: dev, staging, prod."
   }
 }
+
+variable "trusted_principal_arns" {
+  description = "IAM principals allowed to assume the team role, e.g. the team's SSO role."
+  type        = list(string)
+
+  validation {
+    condition     = length(var.trusted_principal_arns) >= 1
+    error_message = "At least one trusted principal is required, otherwise nobody can use the role."
+  }
+}

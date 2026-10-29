@@ -3,7 +3,7 @@ locals {
 
   # The naming convention lives here and nowhere else:
   #   <org>-<env>-<team>-<bucket>   e.g. sumup-prod-payments-invoices
-    buckets = {
+  buckets = {
     for b in var.buckets : b.name => {
       name       = "${local.name_prefix}-${b.name}"
       visibility = b.visibility
@@ -53,4 +53,47 @@ resource "aws_s3_bucket_versioning" "this" {
   versioning_configuration {
     status = "Enabled"
   }
+}
+
+# Private: everything blocked.
+# Public:  ACLs still blocked; only a bucket policy (written below) may grant access.
+resource "aws_s3_bucket_public_access_block" "this" {
+  for_each = local.buckets
+
+  bucket = aws_s3_bucket.this[each.key].id
+
+  block_public_acls       = true
+  ignore_public_acls      = true
+  block_public_policy     = !each.value.public
+  restrict_public_buckets = !each.value.public
+}
+
+resource "aws_s3_bucket_policy" "this" {
+  for_each = local.buckets
+
+  bucket = aws_s3_bucket.this[each.key].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = concat(
+      [{
+        Sid       = "DenyInsecureTransport"
+        Effect    = "Deny"
+        Principal = "*"
+        Action    = "s3:*"
+        Resource  = [each.value.arn, "${each.value.arn}/*"]
+        Condition = { Bool = { "aws:SecureTransport" = "false" } }
+      }],
+      each.value.public ? [{
+        Sid       = "PublicReadObjects"
+        Effect    = "Allow"
+        Principal = "*"
+        Action    = "s3:GetObject"
+        Resource  = "${each.value.arn}/*"
+      }] : []
+    )
+  })
+
+  # The public access block must be relaxed before AWS accepts a public policy.
+  depends_on = [aws_s3_bucket_public_access_block.this]
 }

@@ -65,3 +65,23 @@ variable "trusted_principal_arns" {
     error_message = "At least one trusted principal is required, otherwise nobody can use the role."
   }
 }
+
+variable "cost_center" {
+  description = "Cost center the team's spend is charged to."
+  type        = string
+
+  validation {
+    condition     = length(trimspace(var.cost_center)) > 0
+    error_message = "cost_center must not be empty."
+  }
+}
+
+variable "owner_email" {
+  description = "Team contact, ideally a distribution list rather than a person."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", var.owner_email))
+    error_message = "owner_email must be a valid email address."
+  }
+}

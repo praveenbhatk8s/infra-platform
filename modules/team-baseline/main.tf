@@ -11,6 +11,14 @@ locals {
       arn        = "arn:aws:s3:::${local.name_prefix}-${b.name}"
     }
   }
+
+  tags = {
+    "team"        = var.team_name
+    "cost-center" = var.cost_center
+    "owner"       = var.owner_email
+    "environment" = var.environment
+    "managed-by"  = "terraform"
+  }
 }
 
 resource "aws_s3_bucket" "this" {
@@ -20,6 +28,8 @@ resource "aws_s3_bucket" "this" {
 
   # Never delete data implicitly: destroying a non-empty bucket fails on purpose.
   force_destroy = false
+
+  tags = merge(local.tags, { "visibility" = each.value.visibility })
 }
 
 # ACLs disabled on every bucket: access is controlled by policies only.
@@ -109,6 +119,7 @@ resource "aws_iam_role" "this" {
       Action    = "sts:AssumeRole"
     }]
   })
+  tags = local.tags
 }
 
 resource "aws_iam_role_policy" "s3_access" {

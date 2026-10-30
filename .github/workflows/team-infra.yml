@@ -52,6 +52,14 @@ jobs:
       - name: Check formatting
         run: terraform fmt -check -recursive
 
+      - name: Lint shell scripts
+        run: shellcheck scripts/*.sh
+
+      - name: Lint workflows
+        run: |
+          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
+          ./actionlint -color
+
       - name: Module tests
         working-directory: modules/team-baseline
         run: |

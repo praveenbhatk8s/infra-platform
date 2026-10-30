@@ -1,0 +1,65 @@
+name: team-infra
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  TF_VERSION: "1.12.2" # match your local `terraform version`
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      teams: ${{ steps.changes.outputs.teams }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Work out which teams changed
+        id: changes
+        env:
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            base="$PR_BASE"
+            head="$PR_HEAD"
+          else
+            base="$PUSH_BEFORE"
+            head="$GITHUB_SHA"
+          fi
+
+          teams="$(scripts/detect-changes.sh "$base" "$head")"
+          echo "Teams to plan: $teams"
+          echo "teams=$teams" >> "$GITHUB_OUTPUT"
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Check formatting
+        run: terraform fmt -check -recursive
+
+      - name: Module tests
+        working-directory: modules/team-baseline
+        run: |
+          terraform init -backend=false -input=false
+          terraform test
+
+      - name: Stack tests
+        working-directory: stacks/team
+        run: |
+          terraform init -backend=false -input=false
+          terraform test

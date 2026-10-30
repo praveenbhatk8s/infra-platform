@@ -16,6 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       teams: ${{ steps.changes.outputs.teams }}
+      deleted: ${{ steps.changes.outputs.deleted }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -39,6 +40,10 @@ jobs:
           teams="$(scripts/detect-changes.sh "$base" "$head")"
           echo "Teams to plan: $teams"
           echo "teams=$teams" >> "$GITHUB_OUTPUT"
+
+          deleted="$(scripts/detect-deleted.sh "$base" "$head")"
+          echo "Teams to offboard: $deleted"
+          echo "deleted=$deleted" >> "$GITHUB_OUTPUT"
 
   test:
     runs-on: ubuntu-latest
@@ -71,3 +76,131 @@ jobs:
         run: |
           terraform init -backend=false -input=false
           terraform test
+
+  plan:
+    if: github.event_name == 'pull_request' && needs.detect.outputs.teams != '[]'
+    needs: [detect, test]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        team: ${{ fromJSON(needs.detect.outputs.teams) }}
+    name: plan (${{ matrix.team }})
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Mock plan (no AWS configured)
+        if: vars.AWS_PLAN_ROLE_ARN == ''
+        env:
+          TEAM: ${{ matrix.team }}
+        run: echo "AWS not configured, would run scripts/tf-team.sh plan $TEAM"
+
+      - uses: hashicorp/setup-terraform@v3
+        if: vars.AWS_PLAN_ROLE_ARN != ''
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        if: vars.AWS_PLAN_ROLE_ARN != ''
+        with:
+          role-to-assume: ${{ vars.AWS_PLAN_ROLE_ARN }}
+          aws-region: eu-west-1
+
+      - name: Plan
+        if: vars.AWS_PLAN_ROLE_ARN != ''
+        env:
+          TEAM: ${{ matrix.team }}
+        run: scripts/tf-team.sh plan "$TEAM"
+
+  apply:
+    if: github.event_name == 'push' && needs.detect.outputs.teams != '[]'
+    needs: [detect, test]
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        team: ${{ fromJSON(needs.detect.outputs.teams) }}
+    name: apply (${{ matrix.team }})
+    concurrency:
+      group: apply-${{ matrix.team }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Mock apply (no AWS configured)
+        if: vars.AWS_APPLY_ROLE_ARN == ''
+        env:
+          TEAM: ${{ matrix.team }}
+        run: echo "AWS not configured, would run scripts/tf-team.sh apply $TEAM"
+
+      - uses: hashicorp/setup-terraform@v3
+        if: vars.AWS_APPLY_ROLE_ARN != ''
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        if: vars.AWS_APPLY_ROLE_ARN != ''
+        with:
+          role-to-assume: ${{ vars.AWS_APPLY_ROLE_ARN }}
+          aws-region: eu-west-1
+
+      - name: Apply
+        if: vars.AWS_APPLY_ROLE_ARN != ''
+        env:
+          TEAM: ${{ matrix.team }}
+        run: scripts/tf-team.sh apply "$TEAM"
+
+  offboard:
+    if: github.event_name == 'push' && needs.detect.outputs.deleted != '[]'
+    needs: [detect, test]
+    runs-on: ubuntu-latest
+    environment: offboarding
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        team: ${{ fromJSON(needs.detect.outputs.deleted) }}
+    name: offboard (${{ matrix.team }})
+    concurrency:
+      group: apply-${{ matrix.team }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Mock destroy (no AWS configured)
+        if: vars.AWS_APPLY_ROLE_ARN == ''
+        env:
+          TEAM: ${{ matrix.team }}
+        run: echo "AWS not configured, would run scripts/tf-team.sh destroy $TEAM"
+
+      - uses: hashicorp/setup-terraform@v3
+        if: vars.AWS_APPLY_ROLE_ARN != ''
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        if: vars.AWS_APPLY_ROLE_ARN != ''
+        with:
+          role-to-assume: ${{ vars.AWS_APPLY_ROLE_ARN }}
+          aws-region: eu-west-1
+
+      - name: Destroy
+        if: vars.AWS_APPLY_ROLE_ARN != ''
+        env:
+          TEAM: ${{ matrix.team }}
+          RESTORE_REF: ${{ github.event.before }}
+        run: scripts/tf-team.sh destroy "$TEAM"

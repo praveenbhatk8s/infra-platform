@@ -1,0 +1,7 @@
+# Default owner for everything not matched below: the platform team.
+# In a real org this would be a GitHub team, e.g. @sumup/platform
+*                   @praveenbhatk8s
+
+# Each team owns its own declaration file.
+# In a real org: /teams/payments/   @sumup/payments
+/teams/payments/    @praveenbhatk8s

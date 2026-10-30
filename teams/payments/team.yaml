@@ -1,5 +1,5 @@
 team: payments
-cost_center: CC-1043
+cost_center: CC-1042
 owner: payments-team@example.com
 
 trusted_principals:
